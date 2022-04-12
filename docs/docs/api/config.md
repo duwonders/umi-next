@@ -134,6 +134,53 @@ copy: ['foo.js', 'bar']
     - foo.js
 ```
 
+## crossorigin
+
+* 类型：`{ includes?: string[] }`
+* 默认值：`false`
+
+配置 script 标签的 crossorigin。如果有声明，会为本地 script 加上 crossorigin="anonymous" 的属性。
+
+关于参数。`includes` 参数可以为额外的非本地 script 标签加上此属性。
+
+比如：
+
+```
+crossorigin: {}
+```
+
+然后输出的 HTML 中会有这些变化，
+
+```diff
+- 
+<script src="/umi.js"></script>
++ 
+<script src="/umi.js" crossorigin="anonymous"></script>
+```
+
+## deadCode
+
+* 类型：`{}`
+* 默认值：`false`
+
+检测未使用的文件和导出，仅在 build 阶段开启。
+
+比如：
+
+```
+deadCode: {}
+```
+
+然后执行 build，如有发现，会有类似信息抛出。
+
+```
+Warning: There are 3 unused files:
+ 1. /mock/a.ts
+ 2. /mock/b.ts
+ 3. /pages/index.module.less
+ Please be careful if you want to remove them (¬º-°)¬.
+```
+
 ## define
 
 * 类型：`Record<string, string>`
@@ -252,7 +299,7 @@ HTML 中会生成 `<link rel="shortcut icon" type="image/x-icon" href="/assets/f
 
 注意：HTML 文件始终没有 hash 后缀。
 
-## headScript
+## headScripts
 
 * 类型：`string[] | Script[]`
 * 默认值：`[]`
@@ -289,6 +336,21 @@ headScripts: [
 * 默认值：`{ type: 'browser' }`
 
 设置路由 history 类型。
+
+## https
+
+* 类型：`{ cert: string; key: string; hosts: string[] }`
+* 默认值：`{ hosts: ['127.0.0.1', 'localhost'] }`
+
+开启 dev 的 https 模式。
+
+关于参数。`cert` 和 `key` 分别用于指定 cert 和 key 文件；`hosts` 用于指定要支持 https 访问的 host，默认是 `['127.0.0.1', 'localhost']`。
+
+示例，
+
+```js
+https: {}
+```
 
 ## ignoreMomentLocale
 
@@ -364,12 +426,12 @@ metas: [
 
 ## mfsu
 
-* 类型：`{ esbuild: boolean; mfName: string }`
+* 类型：`{ esbuild: boolean; mfName: string; cacheDirectory: string; chainWebpack: (memo, args) => void }`
 * 默认值：`{ mfName: 'mf' }`
 
 配置基于 Module Federation 的提速功能。
 
-关于参数。`esbuild` 配为 `true` 后会让依赖的预编译走 esbuild，从而让首次启动更快，缺点是二次编译不会有 webpack 的物理缓存，稍慢一些；`mfName` 是此方案的 remote 库的全局变量，默认是 mf，通常在微前端中为了让主应用和子应用不冲突才会进行配置。
+关于参数。`esbuild` 配为 `true` 后会让依赖的预编译走 esbuild，从而让首次启动更快，缺点是二次编译不会有 webpack 的物理缓存，稍慢一些；`mfName` 是此方案的 remote 库的全局变量，默认是 mf，通常在微前端中为了让主应用和子应用不冲突才会进行配置；`cacheDirectory` 可以自定义缓存目录，默认是 `node_modules/.cache/mfsu`; `chainWebpack` 用链式编程的方式修改 依赖的 webpack 配置，基于 webpack-chain，具体 API 可参考 [webpack-api 的文档](https://github.com/mozilla-neutrino/webpack-chain)。
 
 示例，
 
@@ -379,6 +441,17 @@ mfsu: { esbuild: true }
 
 // 关于 mfsu 功能
 mfsu: false
+```
+
+```js
+// webpack 配置修改
+mfsu: {
+  chainWebpack(memo, args) {
+    // 添加额外插件
+  	memo.plugin('hello').use(Plugin, [...args]);
+    return memo;
+  }
+}
 ```
 
 注意：此功能默认开。配置 `mfsu: false` 关闭。
@@ -414,6 +487,26 @@ mock: {
 
 ```js
 mountElementId: 'container'
+```
+
+## monorepoRedirect
+
+* 类型：`{ srcDir?: string[], exclude?: RegExp[] }`
+* 默认值：`false`
+
+在 monorepo 中使用 umi 时，你可能需要引入其他子包的组件、工具等，通过开启此选项来重定向这些子包的导入到他们的源码位置（默认为 `src` 文件夹），这也可以解决 `MFSU` 场景改动子包不热更新的问题。
+
+通过配置 `srcDir` 来调整识别源码文件夹的优先位置，通过 `exclude` 来设定不需要重定向的依赖范围。
+
+示例：
+
+```js
+// 默认重定向到子包的 src 文件夹
+monorepoRedirect: {}
+// 优先定向到 libs 文件夹
+monorepoRedirect: { srcDir: ['libs', 'src'] }
+// 不重定向 @scope/* 的子包
+monorepoRedirect: { exclude: [/^@scope\/.+/] }
 ```
 
 ## outputPath
@@ -637,4 +730,37 @@ targets: { ie: 11 }
 
 ```js
 theme: { '@primary-color': '#1DA57A' }
+```
+
+## verifyCommit
+
+* 类型：`{ scope: string[]; allowEmoji: boolean }`
+* 默认值：`{}`
+
+针对 verify-commit 命令的配置项。
+
+关于参数。`scope` 用于配置允许的 scope，配置后会覆盖默认的；`allowEmoji` 开启后会允许加 EMOJI 前缀，比如 `💥 feat(模块): 添加了个很棒的功能`。
+
+```
+verifyCommit: {
+  scope: ['feat', 'fix'],
+  allowEmoji: true,
+}
+```
+
+
+## vite
+
+* 类型：`object`
+* 默认值：`{}`
+
+开发者的配置会 merge 到 vite 的 [默认配置](https://vitejs.dev/config/)。
+
+示例，
+
+```js
+// 更改临时文件路径到 node_modules/.bin/.vite 文件夹
+vite: {
+    cacheDir:'node_modules/.bin/.vite'
+  }
 ```

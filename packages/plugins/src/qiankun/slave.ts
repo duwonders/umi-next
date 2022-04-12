@@ -2,6 +2,7 @@ import assert from 'assert';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { IApi } from 'umi';
+import { winPath } from 'umi/plugin-utils';
 import { withTmpPath } from '../utils/withTmpPath';
 import { qiankunStateFromMasterModelNamespace } from './constants';
 
@@ -45,8 +46,6 @@ export default (api: IApi) => {
       ...memo,
       // 默认开启 runtimePublicPath，避免出现 dynamic import 场景子应用资源地址出问题
       runtimePublicPath: true,
-      // TODO: runtimeHistory
-      runtimeHistory: {},
       qiankun: {
         ...memo.qiankun,
         slave: initialSlaveOptions,
@@ -56,7 +55,8 @@ export default (api: IApi) => {
     const shouldNotModifyDefaultBase =
       api.userConfig.qiankun?.slave?.shouldNotModifyDefaultBase ??
       initialSlaveOptions.shouldNotModifyDefaultBase;
-    if (!shouldNotModifyDefaultBase) {
+    const historyType = api.userConfig.history?.type || 'browser';
+    if (!shouldNotModifyDefaultBase && historyType !== 'hash') {
       // @ts-ignore
       modifiedDefaultConfig.base = `/${api.pkg.name}`;
     }
@@ -81,17 +81,16 @@ export default (api: IApi) => {
     return config;
   });
 
-  // api.modifyPublicPathStr((publicPathStr) => {
-  //   const { runtimePublicPath } = api.config;
-  //   const { shouldNotModifyRuntimePublicPath } = (api.config.qiankun || {})
-  //     .slave!;
-  //   if (runtimePublicPath === true && !shouldNotModifyRuntimePublicPath) {
-  //     return `window.__INJECTED_PUBLIC_PATH_BY_QIANKUN__ || "${
-  //       api.config.publicPath || '/'
-  //     }"`;
-  //   }
-  //   return publicPathStr;
-  // });
+  api.addHTMLHeadScripts(() => {
+    const dontModify = api.config.qiankun?.shouldNotModifyRuntimePublicPath;
+    return dontModify
+      ? []
+      : [
+          `window.publicPath = window.__INJECTED_PUBLIC_PATH_BY_QIANKUN__ || "${
+            api.config.publicPath || '/'
+          }";`,
+        ];
+  });
 
   api.chainWebpack((config) => {
     assert(api.pkg.name, 'You should have name in package.json.');
@@ -174,11 +173,11 @@ if (!window.__POWERED_BY_QIANKUN__) {
           )
           .replace(
             /from 'qiankun'/g,
-            `from '${dirname(require.resolve('qiankun/package'))}'`,
+            `from '${winPath(dirname(require.resolve('qiankun/package')))}'`,
           )
           .replace(
             /from 'lodash\//g,
-            `from '${dirname(require.resolve('lodash/package'))}/`,
+            `from '${winPath(dirname(require.resolve('lodash/package')))}/`,
           ),
       });
     });

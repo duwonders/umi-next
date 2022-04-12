@@ -4,7 +4,10 @@ import { renderClient } from '{{{ rendererPath }}}';
 import { getRoutes } from './core/route';
 import { createPluginManager } from './core/plugin';
 import { createHistory } from './core/history';
-import { ApplyPluginsType, PluginManager } from 'umi';
+{{#loadingComponent}}
+import Loading from '@/loading';
+{{/loadingComponent}}
+import { ApplyPluginsType } from 'umi';
 {{{ imports }}}
 
 async function render() {
@@ -12,9 +15,9 @@ async function render() {
   const { routes, routeComponents } = await getRoutes(pluginManager);
 
   // allow user to extend routes
-  pluginManager.applyPlugins({
+  await pluginManager.applyPlugins({
     key: 'patchRoutes',
-    type: 'event',
+    type: ApplyPluginsType.event,
     args: {
       routes,
       routeComponents,
@@ -25,6 +28,9 @@ async function render() {
     routeComponents,
     pluginManager,
     rootElement: document.getElementById('{{{ mountElementId }}}'),
+{{#loadingComponent}}
+    loadingComponent: Loading,
+{{/loadingComponent}}
     history: createHistory({
       type: '{{{ historyType }}}',
     }),

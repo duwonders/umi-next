@@ -1,6 +1,5 @@
 import { transform } from '@umijs/bundler-utils/compiled/babel/core';
-import { Transpiler } from '@umijs/bundler-webpack/dist/types';
-import { getCorejsVersion } from '@umijs/utils';
+import { getCorejsVersion, winPath } from '@umijs/utils';
 import { dirname, join } from 'path';
 import { IApi } from '../../types';
 
@@ -14,10 +13,7 @@ export default (api: IApi) => {
         });
       },
     },
-    enableBy: ({ userConfig }) => {
-      if (userConfig.srcTranspiler === Transpiler.swc) {
-        return false;
-      }
+    enableBy: () => {
       return process.env.BABEL_POLYFILL !== 'none';
     },
   });
@@ -31,7 +27,7 @@ export default (api: IApi) => {
     const { code } = transform(
       `
 ${coreJsImports}
-import '${require.resolve('regenerator-runtime/runtime')}';
+import '${winPath(require.resolve('regenerator-runtime/runtime'))}';
 export {};
 `,
       {

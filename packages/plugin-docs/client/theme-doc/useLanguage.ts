@@ -1,3 +1,5 @@
+// @ts-ignore
+import { history } from 'umi';
 import { useThemeContext } from './context';
 
 interface useLanguageResult {
@@ -33,22 +35,25 @@ function useLanguage(): useLanguageResult {
 
     // 切换到默认语言
     if (locale === languages[0].locale && isFromPath) {
+      window.localStorage.removeItem('umi_locale');
       let p = location.pathname.split('/');
       p.shift();
       p.shift();
-      window.location.pathname = p.join('/');
+      history.push('/' + p.join('/'));
       return;
     }
 
+    window.localStorage.setItem('umi_locale', locale);
+
     // 当前在默认语言，切换到其他语言
     if (!isFromPath) {
-      window.location.pathname = locale + location.pathname;
+      history.push('/' + locale + location.pathname);
       return;
     }
 
     let p = location.pathname.split('/');
     p[1] = locale;
-    window.location.pathname = p.join('/');
+    history.push('/' + p.join('/'));
   }
 
   function render(key: string) {

@@ -1,3 +1,10 @@
+// @ts-ignore
 export * from '@@/exports';
-export type { IApi } from '@umijs/preset-umi';
+export type {
+  IApi,
+  webpack,
+  IRoute,
+  UmiApiRequest,
+  UmiApiResponse,
+} from '@umijs/preset-umi';
 export * from './dist';

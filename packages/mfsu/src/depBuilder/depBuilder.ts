@@ -73,19 +73,27 @@ export class DepBuilder {
 
   async build(opts: { deps: Dep[] }) {
     this.isBuilding = true;
-    await this.writeMFFiles({ deps: opts.deps });
-    const newOpts = {
-      ...opts,
-      onBuildComplete: () => {
-        this.isBuilding = false;
-        this.completeFns.forEach((fn) => fn());
-        this.completeFns = [];
-      },
+
+    const onBuildComplete = () => {
+      this.isBuilding = false;
+      this.completeFns.forEach((fn) => fn());
+      this.completeFns = [];
     };
-    if (this.opts.mfsu.opts.buildDepWithESBuild) {
-      await this.buildWithESBuild(newOpts);
-    } else {
-      await this.buildWithWebpack(newOpts);
+
+    try {
+      await this.writeMFFiles({ deps: opts.deps });
+      const newOpts = {
+        ...opts,
+        onBuildComplete,
+      };
+      if (this.opts.mfsu.opts.buildDepWithESBuild) {
+        await this.buildWithESBuild(newOpts);
+      } else {
+        await this.buildWithWebpack(newOpts);
+      }
+    } catch (e) {
+      onBuildComplete();
+      throw e;
     }
   }
 
@@ -147,6 +155,11 @@ export class DepBuilder {
     depConfig.plugins.push(
       new StripSourceMapUrlPlugin({
         webpack: this.opts.mfsu.opts.implementor,
+      }),
+    );
+    depConfig.plugins.push(
+      new this.opts.mfsu.opts.implementor.ProgressPlugin((percent, msg) => {
+        this.opts.mfsu.onProgress({ percent, status: msg });
       }),
     );
     const exposes = opts.deps.reduce<Record<string, string>>((memo, dep) => {

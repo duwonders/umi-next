@@ -1,4 +1,4 @@
-import { pkgUp } from '@umijs/utils';
+import { pkgUp, winPath } from '@umijs/utils';
 import assert from 'assert';
 import enhancedResolve from 'enhanced-resolve';
 import { readFileSync } from 'fs';
@@ -11,9 +11,8 @@ import { getExposeFromContent } from './getExposeFromContent';
 const resolver = enhancedResolve.create({
   mainFields: ['module', 'browser', 'main'], // es module first
   extensions: ['.js', '.json', '.mjs'],
-  // TODO: support exports
-  // tried to add exports, but it don't work with swr
-  exportsFields: [],
+  exportsFields: ['exports'],
+  conditionNames: ['import', 'module', 'require', 'node'],
 });
 
 async function resolve(context: string, path: string): Promise<string> {
@@ -32,13 +31,14 @@ export class Dep {
   public normalizedFile: string;
   public filePath: string;
   public mfsu: MFSU;
+
   constructor(opts: {
     file: string;
     version: string;
     cwd: string;
     mfsu: MFSU;
   }) {
-    this.file = opts.file;
+    this.file = winPath(opts.file);
     this.version = opts.version;
     this.cwd = opts.cwd;
     this.shortFile = this.file;
@@ -109,7 +109,7 @@ export * from '${this.file}';
     const dep = isAbsolute(opts.dep)
       ? opts.dep
       : join(opts.cwd, 'node_modules', opts.dep);
-    const pkg = pkgUp.sync({
+    const pkg = pkgUp.pkgUpSync({
       cwd: dep,
     });
     assert(pkg, `package.json not found for ${opts.dep}`);

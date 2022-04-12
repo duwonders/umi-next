@@ -1,9 +1,10 @@
-import type { InlineConfig as ViteInlineConfig } from 'vite';
-import { mergeConfig } from 'vite';
+import type { InlineConfig as ViteInlineConfig } from '../../../compiled/vite';
+import { mergeConfig } from '../../../compiled/vite';
 import alias from './alias';
 import css from './css';
 import define from './define';
 import devServer from './devServer';
+import merge from './merge';
 import optimizeDeps from './optimizeDeps';
 import react from './react';
 import rename from './rename';
@@ -35,6 +36,7 @@ export default (userConfig: ITmpUserConfig): ViteInlineConfig => {
     optimizeDeps,
     target,
     define,
+    merge,
   ];
 
   return transformers.reduce<ViteInlineConfig>(

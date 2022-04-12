@@ -1,14 +1,17 @@
 import { parseModule } from '@umijs/bundler-utils';
-import { lodash, logger, tryPaths } from '@umijs/utils';
+import type {
+  NextFunction,
+  Request,
+  Response,
+} from '@umijs/bundler-utils/compiled/express';
+import { lodash, logger, tryPaths, winPath } from '@umijs/utils';
 import assert from 'assert';
-import type { NextFunction, Request, Response } from 'express';
 import { readFileSync, statSync } from 'fs';
 import { extname, join } from 'path';
 import webpack, { Configuration } from 'webpack';
 import { lookup } from '../compiled/mrmime';
 // @ts-ignore
 import WebpackVirtualModules from '../compiled/webpack-virtual-modules';
-import autoExport from './babelPlugins/autoExport';
 import awaitImport from './babelPlugins/awaitImport/awaitImport';
 import { getRealPath } from './babelPlugins/awaitImport/getRealPath';
 import {
@@ -23,18 +26,17 @@ import {
 import { Dep } from './dep/dep';
 import { DepBuilder } from './depBuilder/depBuilder';
 import { DepInfo } from './depInfo';
-import autoExportHandler from './esbuildHandlers/autoExport';
 import getAwaitImportHandler from './esbuildHandlers/awaitImport';
 import { Mode } from './types';
 import { makeArray } from './utils/makeArray';
 import { BuildDepPlugin } from './webpackPlugins/buildDepPlugin';
-import { WriteCachePlugin } from './webpackPlugins/writeCachePlugin';
 
 interface IOpts {
   cwd?: string;
   excludeNodeNatives?: boolean;
   exportAllMembers?: Record<string, string[]>;
   getCacheDependency?: Function;
+  onMFSUProgress?: Function;
   mfName?: string;
   mode?: Mode;
   tmpBase?: string;
@@ -52,6 +54,9 @@ export class MFSU {
   public depInfo: DepInfo;
   public depBuilder: DepBuilder;
   public depConfig: Configuration | null = null;
+  public buildDepsAgain: boolean = false;
+  public progress: any = { done: false };
+  public onProgress: Function;
   constructor(opts: IOpts) {
     this.opts = opts;
     this.opts.mfName = this.opts.mfName || DEFAULT_MF_NAME;
@@ -59,6 +64,13 @@ export class MFSU {
       this.opts.tmpBase || join(process.cwd(), DEFAULT_TMP_DIR_NAME);
     this.opts.mode = this.opts.mode || Mode.development;
     this.opts.getCacheDependency = this.opts.getCacheDependency || (() => ({}));
+    this.onProgress = (progress: any) => {
+      this.progress = {
+        ...this.progress,
+        ...progress,
+      };
+      this.opts.onMFSUProgress?.(this.progress);
+    };
     this.opts.cwd = this.opts.cwd || process.cwd();
     this.depInfo = new DepInfo({ mfsu: this });
     this.depBuilder = new DepBuilder({ mfsu: this });
@@ -68,7 +80,7 @@ export class MFSU {
   // swc don't support top-level await
   // ref: https://github.com/vercel/next.js/issues/31054
   asyncImport(content: string) {
-    return `await import('${content}');`;
+    return `await import('${winPath(content)}');`;
     // return `(async () => await import('${content}'))();`;
   }
 
@@ -189,16 +201,29 @@ promise new Promise(resolve => {
         }),
         new BuildDepPlugin({
           onCompileDone: () => {
-            this.buildDeps().catch((e) => {
-              logger.error(e);
-            });
+            if (this.depBuilder.isBuilding) {
+              this.buildDepsAgain = true;
+            } else {
+              this.buildDeps()
+                .then(() => {
+                  this.onProgress({
+                    done: true,
+                  });
+                })
+                .catch((e: Error) => {
+                  logger.error(e);
+                  this.onProgress({
+                    done: true,
+                  });
+                });
+            }
           },
         }),
-        new WriteCachePlugin({
-          onWriteCache: lodash.debounce(() => {
-            this.depInfo.writeCache();
-          }, 300),
-        }),
+        // new WriteCachePlugin({
+        //   onWriteCache: lodash.debounce(() => {
+        //     this.depInfo.writeCache();
+        //   }, 300),
+        // }),
       ],
     );
 
@@ -212,7 +237,8 @@ promise new Promise(resolve => {
   }
 
   async buildDeps() {
-    if (!this.depInfo.shouldBuild()) {
+    const shouldBuild = this.depInfo.shouldBuild();
+    if (!shouldBuild) {
       logger.info('MFSU skip buildDeps');
       return;
     }
@@ -222,11 +248,22 @@ promise new Promise(resolve => {
       cwd: this.opts.cwd!,
       mfsu: this,
     });
-    logger.info('MFSU buildDeps');
+    logger.info(`MFSU buildDeps since ${shouldBuild}`);
     logger.debug(deps.map((dep) => dep.file).join(', '));
     await this.depBuilder.build({
       deps,
     });
+
+    // Write cache
+    this.depInfo.writeCache();
+
+    if (this.buildDepsAgain) {
+      logger.info('MFSU buildDepsAgain');
+      this.buildDepsAgain = false;
+      this.buildDeps().catch((e) => {
+        logger.error(e);
+      });
+    }
   }
 
   getMiddlewares() {
@@ -306,7 +343,7 @@ promise new Promise(resolve => {
   }
 
   getBabelPlugins() {
-    return [autoExport, [awaitImport, this.getAwaitImportCollectOpts()]];
+    return [[awaitImport, this.getAwaitImportCollectOpts()]];
   }
 
   getEsbuildLoaderHandler() {
@@ -314,7 +351,6 @@ promise new Promise(resolve => {
     const checkOpts = this.getAwaitImportCollectOpts();
 
     return [
-      autoExportHandler,
       getAwaitImportHandler({
         cache,
         opts: checkOpts,

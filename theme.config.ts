@@ -3,6 +3,7 @@ import UmiLogo from './packages/plugin-docs/client/theme-doc/icons/umi.png';
 
 export default {
   title: 'UmiJS',
+  description: '插件化的企业级前端应用框架',
   logo: UmiLogo,
   github: 'https://github.com/umijs/umi',
   i18n: [
@@ -70,19 +71,19 @@ export default {
           ],
         },
         {
-          title: 'Umi Pro',
+          title: 'Umi Max',
           children: [
-            'pro/api',
-            'pro/config',
-            'pro/layout-menu',
-            'pro/antd',
-            'pro/charts',
-            'pro/data-flow',
-            'pro/request',
-            'pro/access',
-            'pro/i18n',
-            'pro/micro-frontend',
-            'pro/bacon',
+            'max/api',
+            'max/config',
+            'max/layout-menu',
+            'max/antd',
+            'max/charts',
+            'max/data-flow',
+            'max/request',
+            'max/access',
+            'max/i18n',
+            'max/micro-frontend',
+            'max/bacon',
           ],
         },
       ],
@@ -94,7 +95,11 @@ export default {
       children: [
         {
           title: 'Blog',
-          children: ['umi-4-rc', 'mfsu-faster-then-vite'],
+          children: [
+            'umi-4-rc',
+            'mfsu-faster-than-vite',
+            'mfsu-independent-usage',
+          ],
         },
       ],
     },

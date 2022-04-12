@@ -1,14 +1,15 @@
 import type { RequestHandler } from '@umijs/bundler-webpack';
-import { importLazy, lodash, logger, portfinder, winPath } from '@umijs/utils';
+import { lodash, logger, portfinder, winPath } from '@umijs/utils';
 import { readFileSync } from 'fs';
 import { basename, join } from 'path';
-import * as process from 'process';
 import { DEFAULT_HOST, DEFAULT_PORT } from '../../constants';
 import { IApi } from '../../types';
 import { clearTmp } from '../../utils/clearTmp';
+import { lazyImportFromCurrentPkg } from '../../utils/lazyImportFromCurrentPkg';
 import { createRouteMiddleware } from './createRouteMiddleware';
 import { faviconMiddleware } from './faviconMiddleware';
 import { getBabelOpts } from './getBabelOpts';
+import { printMemoryUsage } from './printMemoryUsage';
 import {
   addUnWatch,
   createDebouncedHandler,
@@ -17,12 +18,10 @@ import {
   watch,
 } from './watch';
 
-const bundlerWebpack: typeof import('@umijs/bundler-webpack') = importLazy(
-  '@umijs/bundler-webpack',
-);
-const bundlerVite: typeof import('@umijs/bundler-vite') = importLazy(
-  '@umijs/bundler-vite',
-);
+const bundlerWebpack: typeof import('@umijs/bundler-webpack') =
+  lazyImportFromCurrentPkg('@umijs/bundler-webpack');
+const bundlerVite: typeof import('@umijs/bundler-vite') =
+  lazyImportFromCurrentPkg('@umijs/bundler-vite');
 
 export default (api: IApi) => {
   api.describe({
@@ -41,7 +40,7 @@ umi dev
 PORT=8888 umi dev
 `,
     async fn() {
-      const enableVite = api.args.vite;
+      const enableVite = !!api.config.vite;
 
       // clear tmp except cache
       clearTmp(api.paths.absTmpPath);
@@ -89,6 +88,7 @@ PORT=8888 umi dev
           absPagesPath,
           !api.config.routes && api.config.conventionRoutes?.base,
           join(absSrcPath, 'layouts'),
+          ...expandJSPaths(join(absSrcPath, 'loading')),
           ...expandJSPaths(join(absSrcPath, 'app')),
         ].filter(Boolean),
       });
@@ -155,9 +155,9 @@ PORT=8888 umi dev
             }
             if (data.changes[api.ConfigChangeType.regenerateTmpFiles]) {
               logger.event(
-                `config ${data.changes[api.ConfigChangeType.reload].join(
-                  ', ',
-                )} changed, regenerate tmp files...`,
+                `config ${data.changes[
+                  api.ConfigChangeType.regenerateTmpFiles
+                ].join(', ')} changed, regenerate tmp files...`,
               );
               await generate({ isFirstTime: false });
             }
@@ -226,6 +226,7 @@ PORT=8888 umi dev
           args,
         });
       };
+      const debouncedPrintMemoryUsage = lodash.debounce(printMemoryUsage, 5000);
       const opts = {
         config: api.config,
         cwd: api.cwd,
@@ -245,12 +246,23 @@ PORT=8888 umi dev
           ...beforeMiddlewares,
           faviconMiddleware,
         ]),
-        afterMiddlewares: [createRouteMiddleware({ api })].concat(middlewares),
+        afterMiddlewares: middlewares.concat(createRouteMiddleware({ api })),
         onDevCompileDone(opts: any) {
+          debouncedPrintMemoryUsage();
+          api.appData.bundleStatus.done = true;
           api.applyPlugins({
             key: 'onDevCompileDone',
             args: opts,
           });
+        },
+        onProgress(opts: any) {
+          api.appData.bundleStatus.progresses = opts.progresses;
+        },
+        onMFSUProgress(opts: any) {
+          api.appData.mfsuBundleStatus = {
+            ...api.appData.mfsuBundleStatus,
+            ...opts,
+          };
         },
         mfsuWithESBuild: api.config.mfsu?.esbuild,
         cache: {

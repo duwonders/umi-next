@@ -11,7 +11,7 @@ const RE_NODE_MODULES = /node_modules/;
 const RE_UMI_LOCAL_DEV = /umi(-next)?\/packages\//;
 
 function isUmiLocalDev(path: string) {
-  return RE_UMI_LOCAL_DEV.test(path);
+  return RE_UMI_LOCAL_DEV.test(winPath(path));
 }
 
 export function checkMatch({
@@ -47,6 +47,8 @@ export function checkMatch({
   if (
     // unMatch specified libs
     opts.unMatchLibs?.includes(value) ||
+    // do not match bundler-webpack/client/client/client.js
+    value.includes('client/client/client.js') ||
     // already handled
     value.startsWith(`${remoteName}/`) ||
     // don't match dynamic path
@@ -88,7 +90,7 @@ export function checkMatch({
   }
 
   if (isMatch) {
-    replaceValue = `${remoteName}/${value}`;
+    replaceValue = `${remoteName}/${winPath(value)}`;
   }
 
   // @ts-ignore

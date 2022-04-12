@@ -1,4 +1,4 @@
-import { defineConfig } from '@umijs/pro';
+import { defineConfig } from '@umijs/max';
 
 export default defineConfig({
   routes: [
@@ -10,7 +10,7 @@ export default defineConfig({
       name: 'index',
     },
     { path: '/users', icon: 'SmileFilled', component: 'users', name: 'users' },
-    { path: '/app1', icon: 'SmileFilled', name: 'app1', microApp: 'app1' },
+    { path: '/app1/*', icon: 'SmileFilled', name: 'app1', microApp: 'app1' },
     {
       path: '/data-flow',
       component: 'data-flow',
@@ -37,7 +37,9 @@ export default defineConfig({
     style: 'less',
     // dark: true,
   },
-  initialState: {},
+  initialState: {
+    loading: '@/components/Loading',
+  },
   access: {},
   dva: {},
   model: {},

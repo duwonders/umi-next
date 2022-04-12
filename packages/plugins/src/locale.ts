@@ -1,7 +1,7 @@
-import { lodash, Mustache } from '@umijs/utils';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { IApi } from 'umi';
+import { lodash, Mustache, winPath } from 'umi/plugin-utils';
 import {
   exactLocalePaths,
   getAntdLocale,
@@ -36,15 +36,16 @@ export default (api: IApi) => {
     api.logger.warn('antd is not installed. <SelecLang /> unavailable');
   }
 
+  const defaultConfig = {
+    baseNavigator: true,
+    useLocalStorage: true,
+    baseSeparator: '-',
+    antd: hasAntd,
+  };
+
   api.describe({
     key: 'locale',
     config: {
-      default: {
-        baseNavigator: true,
-        useLocalStorage: true,
-        baseSeparator: '-',
-        antd: hasAntd,
-      },
       schema(joi) {
         return joi.object({
           default: joi.string(),
@@ -59,16 +60,20 @@ export default (api: IApi) => {
     enableBy: api.EnableBy.config,
   });
 
-  const reactIntlPkgPath = dirname(require.resolve('react-intl/package'));
+  const reactIntlPkgPath = winPath(
+    dirname(require.resolve('react-intl/package')),
+  );
 
   // polyfill
-  if (isNeedPolyfill(api.userConfig?.targets || {})) {
-    api.addEntryImportsAhead(() => [
-      {
-        source: require.resolve('intl'),
-      },
-    ]);
-  }
+  api.addEntryImportsAhead(() =>
+    isNeedPolyfill(api.config.targets || {})
+      ? [
+          {
+            source: require.resolve('intl'),
+          },
+        ]
+      : [],
+  );
 
   const addAntdLocales: IAddAntdLocales = async (args) =>
     await api.applyPlugins({
@@ -88,7 +93,7 @@ export default (api: IApi) => {
   ): Promise<IGetLocaleFileListResult[]> => {
     const { paths } = api;
     return getLocaleList({
-      localeFolder: api.config?.singular ? 'locale' : 'locales',
+      localeFolder: 'locales',
       separator: api.config.locale?.baseSeparator,
       absSrcPath: paths.absSrcPath,
       absPagesPath: paths.absPagesPath,
@@ -104,13 +109,17 @@ export default (api: IApi) => {
     );
     // moment2dayjs
     const resolveKey = api.config.moment2dayjs ? 'dayjs' : 'moment';
-    const momentPkgPath = dirname(
-      require.resolve(`${resolveKey}/package.json`),
+    const momentPkgPath = winPath(
+      dirname(require.resolve(`${resolveKey}/package.json`)),
     );
-    const EventEmitterPkg = dirname(require.resolve('event-emitter/package'));
+    const EventEmitterPkg = winPath(
+      dirname(require.resolve('event-emitter/package')),
+    );
 
-    const { baseSeparator, baseNavigator, antd, title, useLocalStorage } = api
-      .config.locale as ILocaleConfig;
+    const { baseSeparator, baseNavigator, antd, title, useLocalStorage } = {
+      ...defaultConfig,
+      ...(api.config.locale as ILocaleConfig),
+    };
     const defaultLocale = api.config.locale?.default || `zh${baseSeparator}CN`;
     const localeList = await getList(resolveKey);
     const momentLocales = localeList
@@ -168,7 +177,7 @@ export default (api: IApi) => {
       join(__dirname, '../libs/locale/localeExports.tpl'),
       'utf-8',
     );
-    const localeDirName = api.config.singular ? 'locale' : 'locales';
+    const localeDirName = 'locales';
     const localeDirPath = join(api.paths!.absSrcPath!, localeDirName);
     api.writeTmpFile({
       path: 'localeExports.ts',
@@ -192,7 +201,7 @@ export default (api: IApi) => {
         })),
         Antd: !!antd,
         DefaultLocale: JSON.stringify(defaultLocale),
-        warningPkgPath: require.resolve('warning/package'),
+        warningPkgPath: winPath(require.resolve('warning/package')),
         reactIntlPkgPath,
       }),
     });
@@ -228,7 +237,7 @@ export default (api: IApi) => {
     api.writeTmpFile({
       path: 'index.ts',
       content: `
-export { useIntl, formatMessage, FormattedMessage } from './localeExports.ts';
+export { setLocale, getLocale, useIntl, formatMessage, FormattedMessage } from './localeExports.ts';
 export { SelectLang } from './SelectLang.tsx';
 `,
     });

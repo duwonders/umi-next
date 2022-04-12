@@ -1,3 +1,4 @@
+// sort-object-keys
 import type { Root } from '@hapi/joi';
 import { CSSMinifier, JSMinifier, Transpiler } from './types';
 
@@ -45,9 +46,11 @@ export function getSchemas(): Record<string, (Joi: Root) => any> {
       Joi.string().valid(
         CSSMinifier.cssnano,
         CSSMinifier.esbuild,
+        CSSMinifier.parcelCSS,
         CSSMinifier.none,
       ),
     cssMinifierOptions: (Joi) => Joi.object(),
+    deadCode: (Joi) => Joi.object(),
     define: (Joi) => Joi.object(),
     depTranspiler: (Joi) =>
       Joi.string().valid(
@@ -58,22 +61,18 @@ export function getSchemas(): Record<string, (Joi: Root) => any> {
       ),
     devtool: (Joi) =>
       Joi.alternatives().try(Joi.string().regex(DEVTOOL_REGEX), Joi.boolean()),
+    esm: (Joi) => Joi.object(),
     externals: (Joi) =>
       Joi.alternatives().try(Joi.object(), Joi.string(), Joi.func()),
     extraBabelPlugins: (Joi) =>
-      Joi.alternatives().try(
-        Joi.string(),
-        Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.object())),
-      ),
+      Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.array())),
     extraBabelPresets: (Joi) =>
-      Joi.alternatives().try(
-        Joi.string(),
-        Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.object())),
-      ),
+      Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.array())),
     extraPostCSSPlugins: (Joi) => Joi.array(),
     fastRefresh: (Joi) => Joi.boolean(),
     forkTSChecker: (Joi) => Joi.object(),
     hash: (Joi) => Joi.boolean(),
+    https: (Joi) => Joi.object(),
     ignoreMomentLocale: (Joi) => Joi.boolean(),
     inlineLimit: (Joi) => Joi.number(),
     jsMinifier: (Joi) =>
@@ -95,6 +94,8 @@ export function getSchemas(): Record<string, (Joi: Root) => any> {
     mfsu: (Joi) =>
       Joi.alternatives(
         Joi.object({
+          cacheDirectory: Joi.string(),
+          chainWebpack: Joi.function(),
           esbuild: Joi.boolean(),
           mfName: Joi.string(),
         }),
@@ -115,11 +116,10 @@ export function getSchemas(): Record<string, (Joi: Root) => any> {
         Transpiler.none,
       ),
     styleLoader: (Joi) => Joi.object(),
-    svgr: (Joi) => Joi.object(),
     svgo: (Joi) => Joi.alternatives().try(Joi.object(), Joi.boolean()),
+    svgr: (Joi) => Joi.object(),
     targets: (Joi) => Joi.object(),
-    writeToDisk: (Joi) => Joi.boolean(),
-    esm: (Joi) => Joi.object(),
     theme: (Joi) => Joi.object(),
+    writeToDisk: (Joi) => Joi.boolean(),
   };
 }

@@ -11,8 +11,11 @@ type IOpts = {
   afterMiddlewares?: any[];
   beforeMiddlewares?: any[];
   onDevCompileDone?: Function;
+  onProgress?: Function;
+  onMFSUProgress?: Function;
   port?: number;
   host?: string;
+  babelPreset?: any;
   chainWebpack?: Function;
   modifyWebpackConfig?: Function;
   beforeBabelPlugins?: any[];
@@ -23,6 +26,15 @@ type IOpts = {
   config: IConfig;
   entry: Record<string, string>;
 } & Pick<IConfigOpts, 'cache'>;
+
+export function stripUndefined(obj: any) {
+  Object.keys(obj).forEach((key) => {
+    if (obj[key] === undefined) {
+      delete obj[key];
+    }
+  });
+  return obj;
+}
 
 export async function dev(opts: IOpts) {
   const enableMFSU = opts.config.mfsu !== false;
@@ -41,12 +53,20 @@ export async function dev(opts: IOpts) {
       },
       mfName: opts.config.mfsu?.mfName,
       runtimePublicPath: opts.config.runtimePublicPath,
-      tmpBase: join(opts.cwd, 'node_modules/.cache/mfsu'),
+      tmpBase:
+        opts.config.mfsu?.cacheDirectory ||
+        join(opts.cwd, 'node_modules/.cache/mfsu'),
+      onMFSUProgress: opts.onMFSUProgress,
       getCacheDependency() {
-        return {
+        return stripUndefined({
           version: require('../package.json').version,
           esbuildMode: !!opts.config.mfsu?.esbuild,
-        };
+          alias: opts.config.alias,
+          externals: opts.config.externals,
+          theme: opts.config.theme,
+          runtimePublicPath: opts.config.runtimePublicPath,
+          publicPath: opts.config.publicPath,
+        });
       },
     });
   }
@@ -55,6 +75,7 @@ export async function dev(opts: IOpts) {
     env: Env.development,
     entry: opts.entry,
     userConfig: opts.config,
+    babelPreset: opts.babelPreset,
     extraBabelPlugins: [
       ...(opts.beforeBabelPlugins || []),
       ...(mfsu?.getBabelPlugins() || []),
@@ -71,6 +92,7 @@ export async function dev(opts: IOpts) {
     analyze: process.env.ANALYZE,
     cache: opts.cache,
   });
+
   const depConfig = await getConfig({
     cwd: opts.cwd,
     env: Env.development,
@@ -79,11 +101,13 @@ export async function dev(opts: IOpts) {
     hash: true,
     staticPathPrefix: MF_DEP_PREFIX,
     name: MFSU_NAME,
+    chainWebpack: opts.config.mfsu?.chainWebpack,
     cache: {
       buildDependencies: opts.cache?.buildDependencies,
       cacheDirectory: join(opts.cwd, 'node_modules', '.cache', 'mfsu-deps'),
     },
   });
+
   webpackConfig.resolve!.alias ||= {};
   // TODO: REMOVE ME
   ['@umijs/utils/compiled/strip-ansi', 'react-error-overlay'].forEach((dep) => {
@@ -106,5 +130,6 @@ export async function dev(opts: IOpts) {
     host: opts.host,
     afterMiddlewares: [...(opts.afterMiddlewares || [])],
     onDevCompileDone: opts.onDevCompileDone,
+    onProgress: opts.onProgress,
   });
 }

@@ -107,6 +107,24 @@ Details:
     umi build --clean
 ```
 
+## lint
+
+用于检查及修正代码是否符合规则。
+
+```bash
+$ umi lint
+Usage: umi lint 
+
+ 支持只校验 js、ts、tsx、jsx 类型文件： umi lint --eslint-only
+
+ 支持只校验 css、less 等样式文件： umi lint --stylelint-only
+
+ 支持校验 cssinjs 模式校验： umi lint --stylelint-only --cssinjs
+
+ 修正代码： --fix
+
+```
+
 ## plugin
 
 插件相关操作，目前只支持 `list` 子命令。
@@ -136,6 +154,19 @@ $ umi plugin list
 {
   "scripts": { "postinstall": "umi setup" }
 }
+```
+
+## verifyCommit
+
+验证 commit message 信息，通常和 [husky](https://github.com/typicode/husky) 搭配使用。
+
+比如在 `.husky/commit-msg` 做如下配置，
+
+```bash
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+npx --no-install umi verify-ommit $1
 ```
 
 ## version

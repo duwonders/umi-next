@@ -5,12 +5,15 @@ import { resolveProjectDep } from './utils/resolveProjectDep';
 import { withTmpPath } from './utils/withTmpPath';
 
 export default (api: IApi) => {
-  const pkgPath =
-    resolveProjectDep({
-      pkg: api.pkg,
-      cwd: api.cwd,
-      dep: 'antd',
-    }) || dirname(require.resolve('antd/package.json'));
+  let pkgPath: string;
+  try {
+    pkgPath =
+      resolveProjectDep({
+        pkg: api.pkg,
+        cwd: api.cwd,
+        dep: 'antd',
+      }) || dirname(require.resolve('antd/package.json'));
+  } catch (e) {}
 
   api.describe({
     config: {
@@ -30,7 +33,14 @@ export default (api: IApi) => {
     enableBy: api.EnableBy.config,
   });
 
+  function checkPkgPath() {
+    if (!pkgPath) {
+      throw new Error(`Can't find antd package. Please install antd first.`);
+    }
+  }
+
   api.modifyAppData((memo) => {
+    checkPkgPath();
     const version = require(`${pkgPath}/package.json`).version;
     memo.antd = {
       pkgPath,
@@ -40,6 +50,8 @@ export default (api: IApi) => {
   });
 
   api.modifyConfig((memo) => {
+    checkPkgPath();
+
     // antd import
     memo.alias.antd = pkgPath;
 
@@ -57,6 +69,14 @@ export default (api: IApi) => {
       };
     }
 
+    return memo;
+  });
+
+  api.modifyConfig((memo) => {
+    memo.theme = {
+      'root-entry-name': 'default',
+      ...memo.theme,
+    };
     return memo;
   });
 
@@ -79,7 +99,7 @@ export default (api: IApi) => {
 
   // antd config provider
   api.onGenerateFiles(() => {
-    if (!api.config.antd.config) return;
+    if (!api.config.antd.configProvider) return;
     api.writeTmpFile({
       path: `runtime.tsx`,
       content: Mustache.render(
@@ -103,13 +123,13 @@ export function rootContainer(container) {
 }
       `.trim(),
         {
-          config: JSON.stringify(api.config.antd.config),
+          config: JSON.stringify(api.config.antd.configProvider),
         },
       ),
     });
   });
   api.addRuntimePlugin(() => {
-    return api.config.antd.config
+    return api.config.antd.configProvider
       ? [withTmpPath({ api, path: 'runtime.tsx' })]
       : [];
   });

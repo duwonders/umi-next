@@ -1,14 +1,15 @@
-import express from '@umijs/bundler-webpack/compiled/express';
+import express from '@umijs/bundler-utils/compiled/express';
 import { createProxyMiddleware } from '@umijs/bundler-webpack/compiled/http-proxy-middleware';
 import webpack, {
   Configuration,
 } from '@umijs/bundler-webpack/compiled/webpack';
 import { chalk, logger } from '@umijs/utils';
-import { existsSync, readFileSync } from 'fs';
+import { createReadStream, existsSync } from 'fs';
 import http from 'http';
 import { join } from 'path';
 import { MESSAGE_TYPE } from '../constants';
 import { IConfig } from '../types';
+import { createHttpsServer } from './https';
 import { createWebSocketServer } from './ws';
 
 interface IOpts {
@@ -20,6 +21,7 @@ interface IOpts {
   beforeMiddlewares?: any[];
   afterMiddlewares?: any[];
   onDevCompileDone?: Function;
+  onProgress?: Function;
 }
 
 export async function createServer(opts: IOpts) {
@@ -47,7 +49,7 @@ export async function createServer(opts: IOpts) {
     res.header('Access-Control-Allow-Origin', '*');
     res.header(
       'Access-Control-Allow-Headers',
-      'Content-Type, Content-Length, Authorization, Accept, X-Requested-With , yourHeaderFeild',
+      'Content-Type, Content-Length, Authorization, Accept, X-Requested-With',
     );
     res.header(
       'Access-Control-Allow-Methods',
@@ -68,19 +70,38 @@ export async function createServer(opts: IOpts) {
   app.use((req, res, next) => {
     if (req.path === '/umi.js' && existsSync(join(opts.cwd, 'umi.js'))) {
       res.setHeader('Content-Type', 'application/javascript');
-      res.send(readFileSync(join(opts.cwd, 'umi.js'), 'utf-8'));
+      createReadStream(join(opts.cwd, 'umi.js')).on('error', next).pipe(res);
     } else {
       next();
     }
   });
 
   // webpack dev middleware
-  const compiler = webpack(
-    Array.isArray(webpackConfig) ? webpackConfig : [webpackConfig],
-  );
+  const configs = Array.isArray(webpackConfig)
+    ? webpackConfig
+    : [webpackConfig];
+  const progresses: any[] = [];
+  if (opts.onProgress) {
+    configs.forEach((config) => {
+      const progress = {
+        percent: 0,
+        status: 'waiting',
+      };
+      progresses.push(progress);
+      config.plugins.push(
+        new webpack.ProgressPlugin((percent, msg) => {
+          progress.percent = percent;
+          progress.status = msg;
+          opts.onProgress!({ progresses });
+        }),
+      );
+    });
+  }
+  const compiler = webpack(configs);
+
   const webpackDevMiddleware = require('@umijs/bundler-webpack/compiled/webpack-dev-middleware');
   const compilerMiddleware = webpackDevMiddleware(compiler, {
-    publicPath: '/',
+    publicPath: userConfig.publicPath || '/',
     writeToDisk: userConfig.writeToDisk,
     stats: 'none',
     // watchOptions: { ignored }
@@ -91,6 +112,7 @@ export async function createServer(opts: IOpts) {
   let stats: any;
   let isFirstCompile = true;
   compiler.compilers.forEach(addHooks);
+
   function addHooks(compiler: webpack.Compiler) {
     compiler.hooks.invalid.tap('server', () => {
       sendMessage(MESSAGE_TYPE.invalid);
@@ -106,6 +128,7 @@ export async function createServer(opts: IOpts) {
       isFirstCompile = false;
     });
   }
+
   function sendStats(
     stats: webpack.StatsCompilation,
     force?: boolean,
@@ -137,6 +160,7 @@ export async function createServer(opts: IOpts) {
       sendMessage(MESSAGE_TYPE.ok, null, sender);
     }
   }
+
   function getStats(stats: webpack.Stats) {
     return stats.toJson({
       all: false,
@@ -147,6 +171,7 @@ export async function createServer(opts: IOpts) {
       errorDetails: false,
     });
   }
+
   function sendMessage(type: string, data?: any, sender?: any) {
     (sender || ws).send(JSON.stringify({ type, data }));
   }
@@ -155,11 +180,28 @@ export async function createServer(opts: IOpts) {
   // proxy
   if (proxy) {
     Object.keys(proxy).forEach((key) => {
-      app.use(key, createProxyMiddleware(proxy[key]));
+      const proxyConfig = proxy[key];
+      const target = proxyConfig.target;
+      if (target) {
+        app.use(
+          key,
+          createProxyMiddleware(key, {
+            ...proxy[key],
+            // Add x-real-url in response header
+            onProxyRes(proxyRes, req: any) {
+              proxyRes.headers['x-real-url'] =
+                new URL(req.url || '', target as string)?.href || '';
+            },
+          }),
+        );
+      }
     });
   }
   // after middlewares
-  (opts.afterMiddlewares || []).forEach((m) => app.use(m));
+  (opts.afterMiddlewares || []).forEach((m) => {
+    // TODO: FIXME
+    app.use(m.toString().includes(`{ compiler }`) ? m({ compiler }) : m);
+  });
   // history fallback
   app.use(
     require('@umijs/bundler-webpack/compiled/connect-history-api-fallback')({
@@ -178,14 +220,19 @@ export async function createServer(opts: IOpts) {
     res.set('Content-Type', 'text/html');
     const htmlPath = join(opts.cwd, 'index.html');
     if (existsSync(htmlPath)) {
-      const html = readFileSync(htmlPath, 'utf-8');
-      res.send(html);
+      createReadStream(htmlPath).on('error', next).pipe(res);
     } else {
       next();
     }
   });
 
-  const server = http.createServer(app);
+  const server = userConfig.https
+    ? await createHttpsServer(app, userConfig.https)
+    : http.createServer(app);
+  if (!server) {
+    return null;
+  }
+
   const ws = createWebSocketServer(server);
 
   ws.wss.on('connection', (socket) => {
@@ -194,10 +241,14 @@ export async function createServer(opts: IOpts) {
     }
   });
 
+  const protocol = userConfig.https ? 'https:' : 'http:';
   const port = opts.port || 8000;
+
   server.listen(port, () => {
     const host = opts.host && opts.host !== '0.0.0.0' ? opts.host : '127.0.0.1';
-    logger.ready(`App listening at ${chalk.green(`http://${host}:${port}`)}`);
+    logger.ready(
+      `App listening at ${chalk.green(`${protocol}//${host}:${port}`)}`,
+    );
   });
 
   return server;

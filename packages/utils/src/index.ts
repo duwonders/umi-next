@@ -1,5 +1,4 @@
 import * as chokidar from 'chokidar';
-import * as clipboardy from 'clipboardy';
 import address from '../compiled/address';
 import axios from '../compiled/axios';
 import chalk from '../compiled/chalk';
@@ -7,12 +6,13 @@ import cheerio from '../compiled/cheerio';
 import crossSpawn from '../compiled/cross-spawn';
 import debug from '../compiled/debug';
 import deepmerge from '../compiled/deepmerge';
+import * as execa from '../compiled/execa';
 import fsExtra from '../compiled/fs-extra';
 import glob from '../compiled/glob';
 // import globby from '../compiled/globby';
 import lodash from '../compiled/lodash';
 import Mustache from '../compiled/mustache';
-import pkgUp from '../compiled/pkg-up';
+import * as pkgUp from '../compiled/pkg-up';
 import portfinder from '../compiled/portfinder';
 import prompts from '../compiled/prompts';
 import resolve from '../compiled/resolve';
@@ -40,10 +40,10 @@ export {
   chalk,
   cheerio,
   chokidar,
-  clipboardy,
   crossSpawn,
   debug,
   deepmerge,
+  execa,
   fsExtra,
   glob,
   Generator,

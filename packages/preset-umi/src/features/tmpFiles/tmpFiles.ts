@@ -18,12 +18,15 @@ export default (api: IApi) => {
   });
 
   api.onGenerateFiles(async (opts) => {
-    const rendererPath = await api.applyPlugins({
-      key: 'modifyRendererPath',
-      initialValue: dirname(
-        require.resolve('@umijs/renderer-react/package.json'),
-      ),
-    });
+    const rendererPath = winPath(
+      await api.applyPlugins({
+        key: 'modifyRendererPath',
+        initialValue: dirname(
+          require.resolve('@umijs/renderer-react/package.json'),
+        ),
+      }),
+    );
+
     // umi.ts
     api.writeTmpFile({
       noPluginDir: true,
@@ -53,7 +56,14 @@ export default (api: IApi) => {
         importsAhead: importsToStr(
           await api.applyPlugins({
             key: 'addEntryImportsAhead',
-            initialValue: [],
+            initialValue: [
+              api.appData.globalCSS.length && {
+                source: api.appData.globalCSS[0],
+              },
+              api.appData.globalJS.length && {
+                source: api.appData.globalJS[0],
+              },
+            ].filter(Boolean),
           }),
         ).join('\n'),
         imports: importsToStr(
@@ -64,6 +74,10 @@ export default (api: IApi) => {
         ).join('\n'),
         basename: api.config.base,
         historyType: api.config.history.type,
+        loadingComponent:
+          existsSync(join(api.paths.absSrcPath, 'loading.tsx')) ||
+          existsSync(join(api.paths.absSrcPath, 'loading.jsx')) ||
+          existsSync(join(api.paths.absSrcPath, 'loading.js')),
       },
     });
 
@@ -97,7 +111,7 @@ export default function EmptyRoute() {
     const clonedRoutes = lodash.cloneDeep(routes);
     for (const id of Object.keys(clonedRoutes)) {
       for (const key of Object.keys(clonedRoutes[id])) {
-        if (key.startsWith('__')) {
+        if (key.startsWith('__') || key.startsWith('absPath')) {
           delete clonedRoutes[id][key];
         }
       }
@@ -175,36 +189,71 @@ export default function EmptyRoute() {
     return exports || [];
   }
 
+  function checkMembers(opts: {
+    path: string;
+    members: string[];
+    exportMembers: string[];
+  }) {
+    const conflicts = lodash.intersection(opts.exportMembers, opts.members);
+    if (conflicts.length) {
+      throw new Error(
+        `Conflict members: ${conflicts.join(', ')} in ${opts.path}`,
+      );
+    }
+  }
+
+  async function getExportsAndCheck(opts: {
+    path: string;
+    exportMembers: string[];
+  }) {
+    const members = (await getExports(opts)) as string[];
+    checkMembers({
+      members,
+      exportMembers: opts.exportMembers,
+      path: opts.path,
+    });
+    opts.exportMembers.push(...members);
+    return members;
+  }
+
   // Generate @@/exports.ts
   api.register({
     key: 'onGenerateFiles',
     fn: async () => {
       const exports = [];
+      const exportMembers = ['default'];
       // @umijs/renderer-react
       exports.push('// @umijs/renderer-react');
-      const rendererReactPath = dirname(
-        require.resolve('@umijs/renderer-react/package.json'),
+      const rendererReactPath = winPath(
+        dirname(require.resolve('@umijs/renderer-react/package.json')),
       );
       exports.push(
         `export { ${(
-          await getExports({
+          await getExportsAndCheck({
             path: join(rendererReactPath, 'dist/index.js'),
+            exportMembers,
           })
         ).join(', ')} } from '${rendererReactPath}';`,
       );
       // umi/client/client/plugin
       exports.push('// umi/client/client/plugin');
       const umiDir = process.env.UMI_DIR!;
-      const umiPluginPath = join(umiDir, 'client/client/plugin.js');
+      const umiPluginPath = winPath(join(umiDir, 'client/client/plugin.js'));
       exports.push(
         `export { ${(
-          await getExports({
+          await getExportsAndCheck({
             path: umiPluginPath,
+            exportMembers,
           })
         ).join(', ')} } from '${umiPluginPath}';`,
       );
       // @@/core/history.ts
       exports.push(`export { history, createHistory } from './core/history';`);
+      checkMembers({
+        members: ['history', 'createHistory'],
+        exportMembers,
+        path: '@@/core/history.ts',
+      });
       // plugins
       exports.push('// plugins');
       const plugins = readdirSync(api.paths.absTmpPath).filter((file) => {
@@ -224,16 +273,26 @@ export default function EmptyRoute() {
         if (existsSync(join(api.paths.absTmpPath, plugin, 'index.tsx'))) {
           file = join(api.paths.absTmpPath, plugin, 'index.tsx');
         }
-        const pluginExports = await getExports({
+        const pluginExports = await getExportsAndCheck({
           path: file!,
+          exportMembers,
         });
         if (pluginExports.length) {
           exports.push(
-            `export { ${pluginExports.join(', ')} } from '${join(
-              api.paths.absTmpPath,
-              plugin,
+            `export { ${pluginExports.join(', ')} } from '${winPath(
+              join(api.paths.absTmpPath, plugin),
             )}';`,
           );
+        }
+      }
+      // plugins types.ts
+      exports.push('// plugins types.d.ts');
+      for (const plugin of plugins) {
+        const file = winPath(join(api.paths.absTmpPath, plugin, 'types.d.ts'));
+        if (existsSync(file)) {
+          // 带 .ts 后缀的声明文件 会导致声明失效
+          const noSuffixFile = file.replace(/\.ts$/, '');
+          exports.push(`export * from '${noSuffixFile}';`);
         }
       }
       api.writeTmpFile({

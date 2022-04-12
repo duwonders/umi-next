@@ -1,11 +1,12 @@
 {
-  "name": "app1",
+  "name": "@example/qiankun-slave",
+  "private": true,
   "scripts": {
-    "dev": "umipro dev",
+    "dev": "max dev",
     "start": "npm run dev"
   },
   "dependencies": {
-    "@umijs/pro": "4.0.0-rc.1",
+    "@umijs/max": "4.0.0-canary.20220412.3",
     "react": "17.0.2",
     "react-dom": "17.0.2"
   }

@@ -34,6 +34,10 @@ export class Plugin {
   key: string;
   apply: Function;
   config: IPluginConfig = {};
+  time: {
+    register?: number;
+    hooks: Record<string, number[]>;
+  } = { hooks: {} };
   enableBy:
     | EnableBy
     | ((opts: { userConfig: any; config: any; env: Env }) => boolean) =
@@ -52,7 +56,7 @@ export class Plugin {
     let pkg = null;
     // path is the package entry
     let isPkgEntry = false;
-    const pkgJSONPath = pkgUp.sync({ cwd: this.path });
+    const pkgJSONPath = pkgUp.pkgUpSync({ cwd: this.path })!;
     if (pkgJSONPath) {
       pkg = require(pkgJSONPath);
       isPkgEntry =
@@ -64,6 +68,7 @@ export class Plugin {
     this.apply = () => {
       register.register({
         implementor: esbuild,
+        exts: ['.ts', '.mjs'],
       });
       register.clearFiles();
       let ret;
@@ -73,11 +78,9 @@ export class Plugin {
         throw new Error(
           `Register ${this.type} ${this.path} failed, since ${e.message}`,
         );
+      } finally {
+        register.restore();
       }
-      for (const file of register.getFiles()) {
-        delete require.cache[file];
-      }
-      register.restore();
       // use the default member for es modules
       return ret.__esModule ? ret.default : ret;
     };
@@ -117,6 +120,7 @@ export class Plugin {
         .map((part) => lodash.camelCase(part))
         .join('.');
     }
+
     return nameToKey(
       opts.isPkgEntry
         ? Plugin.stripNoneUmiScope(opts.pkg.name).replace(RE[this.type], '')
@@ -180,6 +184,7 @@ export class Plugin {
         });
       });
     }
+
     return {
       presets: get('preset'),
       plugins: get('plugin'),

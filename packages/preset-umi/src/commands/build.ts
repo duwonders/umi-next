@@ -1,18 +1,19 @@
 import { getMarkup } from '@umijs/server';
-import { importLazy, logger } from '@umijs/utils';
+import { logger } from '@umijs/utils';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { IApi } from '../types';
 import { clearTmp } from '../utils/clearTmp';
+import { lazyImportFromCurrentPkg } from '../utils/lazyImportFromCurrentPkg';
+import { getAssetsMap } from './dev/getAssetsMap';
 import { getBabelOpts } from './dev/getBabelOpts';
 import { getMarkupArgs } from './dev/getMarkupArgs';
+import { printMemoryUsage } from './dev/printMemoryUsage';
 
-const bundlerWebpack: typeof import('@umijs/bundler-webpack') = importLazy(
-  '@umijs/bundler-webpack',
-);
-const bundlerVite: typeof import('@umijs/bundler-vite') = importLazy(
-  '@umijs/bundler-vite',
-);
+const bundlerWebpack: typeof import('@umijs/bundler-webpack') =
+  lazyImportFromCurrentPkg('@umijs/bundler-webpack');
+const bundlerVite: typeof import('@umijs/bundler-vite') =
+  lazyImportFromCurrentPkg('@umijs/bundler-vite');
 
 export default (api: IApi) => {
   api.registerCommand({
@@ -95,7 +96,7 @@ umi build --clean
         entry: {
           umi: join(api.paths.absTmpPath, 'umi.ts'),
         },
-        ...(api.args.vite
+        ...(api.config.vite
           ? { modifyViteConfig }
           : { babelPreset, chainWebpack, modifyWebpackConfig }),
         beforeBabelPlugins,
@@ -103,6 +104,7 @@ umi build --clean
         extraBabelPlugins,
         extraBabelPresets,
         onBuildComplete(opts: any) {
+          printMemoryUsage();
           api.applyPlugins({
             key: 'onBuildComplete',
             args: opts,
@@ -110,20 +112,33 @@ umi build --clean
         },
         clean: api.args.clean,
       };
-      if (api.args.vite) {
-        await bundlerVite.build(opts);
+
+      let stats: any;
+      if (api.config.vite) {
+        stats = await bundlerVite.build(opts);
       } else {
-        await bundlerWebpack.build(opts);
+        stats = await bundlerWebpack.build(opts);
       }
 
       // generate html
+      // vite 在 build 时通过插件注入 js 和 css
+      const assetsMap = api.config.vite
+        ? {}
+        : getAssetsMap({
+            stats,
+            publicPath: api.config.publicPath,
+          });
       const { vite } = api.args;
       const markupArgs = await getMarkupArgs({ api });
       // @ts-ignore
       const markup = await getMarkup({
         ...markupArgs,
-        styles: ['/umi.css'].concat(markupArgs.styles),
-        scripts: ['/umi.js'].concat(markupArgs.scripts),
+        styles: (api.config.vite ? [] : assetsMap['umi.css'] || []).concat(
+          markupArgs.styles,
+        ),
+        scripts: (api.config.vite ? [] : assetsMap['umi.js'] || []).concat(
+          markupArgs.scripts,
+        ),
         esmScript: !!opts.config.esm || vite,
         path: '/',
       });
@@ -132,7 +147,7 @@ umi build --clean
         markup,
         'utf-8',
       );
-      logger.event('build index.html');
+      logger.event('Build index.html');
 
       // print size
     },

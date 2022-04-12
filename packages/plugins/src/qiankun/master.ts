@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { IApi } from 'umi';
+import { winPath } from 'umi/plugin-utils';
 import { withTmpPath } from '../utils/withTmpPath';
 import {
   defaultHistoryType,
@@ -120,7 +121,6 @@ export const setMasterOptions = (newOpts) => options = ({ ...options, ...newOpts
           path: file.replace(/\.tpl$/, ''),
           tpl: getFileContent(file),
           context: {
-            runtimeHistory: api.config.runtimeHistory,
             dynamicRoot: false,
             hasModelPlugin: api.isPluginEnable('model'),
             // dynamicRoot:
@@ -139,11 +139,11 @@ export const setMasterOptions = (newOpts) => options = ({ ...options, ...newOpts
             )
             .replace(
               /from 'qiankun'/g,
-              `from '${dirname(require.resolve('qiankun/package'))}'`,
+              `from '${winPath(dirname(require.resolve('qiankun/package')))}'`,
             )
             .replace(
               /from 'lodash\//g,
-              `from '${dirname(require.resolve('lodash/package'))}/`,
+              `from '${winPath(dirname(require.resolve('lodash/package')))}/`,
             ),
         });
       }

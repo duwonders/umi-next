@@ -10,6 +10,7 @@ import { getMasterOptions, setMasterOptions } from './masterOptions';
 import { MasterOptions, MicroAppRoute } from './types';
 
 let microAppRuntimeRoutes: MicroAppRoute[];
+let microAppRuntimeMenus: [];
 
 async function getMasterRuntime() {
   const config = await getPluginManager().applyPlugins({
@@ -91,12 +92,14 @@ export async function render(oldRender: typeof noop) {
     // 设置新的 fetch
     masterOptions = { ...masterOptions, fetch: fetchWithCredentials };
   }
+  
 
   // 更新 master options
   setMasterOptions(masterOptions);
 
-  const { apps = [], routes, ...options } = masterOptions;
+  const { apps = [], routes, menus, ...options } = masterOptions;
   microAppRuntimeRoutes = routes;
+  microAppRuntimeMenus = menus;
 
   // 主应用相关的配置注册完毕后即可开启渲染
   oldRender();
@@ -124,6 +127,37 @@ export async function render(oldRender: typeof noop) {
     );
   }
 }
+
+export function layout(initConfig) {
+  const loopMenusAndDoSomeThing = (menus, callback: (targetNode, key?: string) => void, key: string = '0'): void => {
+    for (let i = 0; i < menus.length; i++) {
+      if (Array.isArray(menus[i].children) && (menus[i].children).length > 0) {
+        loopMenusAndDoSomeThing((menus[i].children), callback, `${key}-${i}`);
+      }
+      callback(menus[i], `${key}-${i}`);
+    }
+  }
+  return {
+    ...initConfig,
+    patchMenus: function (menus, initialInfo) {
+      if (_.isArray(microAppRuntimeMenus) && microAppRuntimeMenus.length > 0) { // 
+        loopMenusAndDoSomeThing(microAppRuntimeMenus, (menuItem, key) => {
+          menuItem.key = key; // 给菜单项唯一key
+          if (menuItem.target) { // 处理外链
+            menuItem.path = menuItem.target;
+            menuItem.isUrl = true;
+          }
+        })
+        menus.length = 0;
+        menus.push(...microAppRuntimeMenus);
+      }
+      if (_.isFunction(initConfig.patchMenus)) {
+        initConfig.patchMenus(menus, initialInfo);
+      }
+      return menus;
+    },
+  }
+};
 
 export function patchRoutes({ routes }: { routes: any[] }) {
   if (microAppRuntimeRoutes) {
